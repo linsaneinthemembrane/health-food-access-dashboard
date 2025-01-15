@@ -5,6 +5,7 @@ import pandas as pd
 import boto3
 from botocore.config import Config
 
+# AWS Configuration using Streamlit secrets
 AWS_ACCESS_KEY = st.secrets["AWS_ACCESS_KEY"]
 AWS_SECRET_KEY = st.secrets["AWS_SECRET_KEY"]
 BUCKET_NAME = st.secrets["BUCKET_NAME"]
@@ -23,7 +24,12 @@ def load_map_from_s3(metric):
         return obj['Body'].read().decode('utf-8')
     except Exception as e:
         st.error(f"Error loading map: {e}")
-        return None
+        try:
+            with open(f"{metric}_map.html", 'r', encoding='utf-8') as f:
+                return f.read()
+        except:
+            st.error("Unable to load map data")
+            return None
 
 def load_data_from_s3():
     """Load GeoJSON data from S3"""
@@ -34,13 +40,13 @@ def load_data_from_s3():
         st.error(f"Error loading data: {e}")
         return None
 
-
 # Page configuration
 st.set_page_config(layout="wide")
 st.title("Health and Food Access Dashboard")
 
-# Load data first
+# Load data from S3
 merged_map = load_data_from_s3()
+
 # Define metrics dictionary for labels
 metrics = {
     "OBESITY_CrudePrev": "Obesity Prevalence",
@@ -90,30 +96,27 @@ with col2:
     with col2_4:
         st.metric("Minimum", f"{stats['min']:.1f}%")
 
-# Add new section for aggregate worst states analysis
-st.markdown("---")  # Horizontal line
+# Priority States Analysis
+st.markdown("---")
 st.header("Priority States for Food Access Program")
 
 # Calculate aggregate scores across all metrics
 metrics_list = ['OBESITY_CrudePrev', 'DIABETES_CrudePrev', 'BPHIGH_CrudePrev', 
                 'PCT_LACCESS_POP15', 'PCT_LACCESS_SNAP15']
 
-# Create normalized score for each metric and sum
 def get_priority_states(data, metrics):
-    # Normalize each metric and sum
     normalized_scores = pd.DataFrame()
     for m in metrics:
         normalized_scores[m] = (data[m] - data[m].min()) / (data[m].max() - data[m].min())
     data['aggregate_score'] = normalized_scores.mean(axis=1)
-    
     return data[['STATE', 'aggregate_score']].sort_values(
         by='aggregate_score', 
         ascending=False
     ).head(5)
 
-priority_states = get_priority_states(merged_map_extended, metrics_list)
+priority_states = get_priority_states(merged_map, metrics_list)
 
-# Display priority states in three columns
+# Display priority states
 col_p1, col_p2 = st.columns([3, 7])
 with col_p1:
     st.subheader("Top 5 Priority States")
@@ -126,7 +129,7 @@ with col_p2:
     These states show consistently poor health outcomes and limited food access across all metrics, making them primary candidates for food access program implementation. The aggregate scores (shown as percentages) are calculated by normalizing each state's metrics (obesity, diabetes, blood pressure, food access, and SNAP access) to a 0-100 scale and averaging them. For example, Mississippi's 72.9% score indicates it ranks poorly across all health and access metrics, while Alabama's 64.4% suggests significant but relatively lower systemic challenges. Higher percentages indicate states facing more severe combined challenges in both health outcomes and food accessibility.
     """)
 
-
+# Program Impact Analysis
 st.markdown("---")
 st.header("Program Impact Analysis")
 
@@ -135,14 +138,13 @@ impact_col1, impact_col2, impact_col3 = st.columns(3)
 
 with impact_col1:
     st.subheader("Food Access Impact")
-    priority_states = merged_map_extended[merged_map_extended['STATE'].isin(['MS', 'WV', 'LA', 'DE', 'AL'])]
+    priority_states = merged_map[merged_map['STATE'].isin(['MS', 'WV', 'LA', 'DE', 'AL'])]
     
-    # Food access metrics
     food_metrics = {
         'Low Access Population': priority_states['PCT_LACCESS_POP15'].mean(),
         'SNAP Recipients': priority_states['PCT_LACCESS_SNAP15'].mean(),
         'Low Income Access': priority_states['PCT_LACCESS_LOWI15'].mean()
-                }
+    }
     for metric, value in food_metrics.items():
         st.metric(metric, f"{value:.1f}%")
 
@@ -151,14 +153,10 @@ with impact_col2:
     demographics = {
         'SNAP Recipients': priority_states['PCT_LACCESS_SNAP15'].mean(),
         'Low Income': priority_states['PCT_LACCESS_LOWI15'].mean(),
-        'Seniors': priority_states['PCT_LACCESS_SENIORS15'].mean(),
-        'White Population': priority_states['PCT_LACCESS_WHITE15'].mean(),
-        'Black Population': priority_states['PCT_LACCESS_BLACK15'].mean(),
-        'Hispanic Population': priority_states['PCT_LACCESS_HISP15'].mean()
+        'Seniors': priority_states['PCT_LACCESS_SENIORS15'].mean()
     }
     for group, value in demographics.items():
         st.metric(group, f"{value:.1f}%")
-
 
 with impact_col3:
     st.subheader("Current Health Status")
@@ -170,7 +168,6 @@ with impact_col3:
     for metric, value in health_metrics.items():
         st.metric(metric, f"{value:.1f}%")
 
-# Add program recommendations
 st.markdown("""
 ### Implementation Strategy
 1. **Target Population**: Focus on areas where 18.5% of the population has limited food access
@@ -183,4 +180,3 @@ st.markdown("""
    - 41.4% high blood pressure rate
 4. **Focus Areas**: Target regions with highest concentration of SNAP recipients and low-income populations with limited food access
 """)
-
