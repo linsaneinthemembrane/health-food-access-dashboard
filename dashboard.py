@@ -23,6 +23,7 @@ def load_map_from_s3(metric):
         return obj['Body'].read().decode('utf-8')
     except Exception as e:
         st.error(f"Error loading map: {e}")
+        return None
 
 def load_data_from_s3():
     """Load GeoJSON data from S3"""
@@ -31,6 +32,7 @@ def load_data_from_s3():
         return gpd.read_file(obj['Body'])
     except Exception as e:
         st.error(f"Error loading data: {e}")
+        return None
 
 
 # Page configuration
@@ -39,7 +41,6 @@ st.title("Health and Food Access Dashboard")
 
 # Load data first
 merged_map = load_data_from_s3()
-merged_map_extended = gpd.read_file("merged_map_extended.geojson")
 # Define metrics dictionary for labels
 metrics = {
     "OBESITY_CrudePrev": "Obesity Prevalence",
@@ -53,18 +54,18 @@ metrics = {
 col1, col2 = st.columns([5, 5])
 
 with col1:
-    # Metric selector with readable labels
     metric = st.selectbox(
         "Select Health or Food Access Metric",
         options=list(metrics.keys()),
         format_func=lambda x: metrics[x]
     )
     
-    # Load correct HTML file based on selected metric
-    file_name = f"{metric}_map.html"  # Remove .lower() to match actual filenames
-    with open(file_name, 'r', encoding='utf-8') as f:
-        html_data = f.read()
-    components.html(html_data, height=400)
+    # Load map from S3
+    html_data = load_map_from_s3(metric)
+    if html_data:
+        components.html(html_data, height=400)
+    else:
+        st.error("Unable to load map data")
 
 with col2:
     # Dynamic Statistics for Selected Metric
