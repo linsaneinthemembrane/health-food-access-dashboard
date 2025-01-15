@@ -4,7 +4,10 @@ import geopandas as gpd
 import pandas as pd
 import boto3
 from botocore.config import Config
-from config import AWS_ACCESS_KEY, AWS_SECRET_KEY, BUCKET_NAME
+
+AWS_ACCESS_KEY = st.secrets["AWS_ACCESS_KEY"]
+AWS_SECRET_KEY = st.secrets["AWS_SECRET_KEY"]
+BUCKET_NAME = st.secrets["BUCKET_NAME"]
 
 s3 = boto3.client('s3',
     aws_access_key_id=AWS_ACCESS_KEY,
